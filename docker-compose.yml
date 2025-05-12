@@ -1,0 +1,13 @@
+version: '3.8'
+
+services:
+  translator:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - ${INPUT_DIR}:/app/input
+      - ${OUTPUT_DIR}:/app/output
+    environment:
+      - PYTHONUNBUFFERED=1
+    command: python main.py
