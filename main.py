@@ -40,6 +40,33 @@ def draw_text_panel(original_img, text_lines):
 
     return panel
 
+def process_image(filename):
+    input_path = os.path.join(INPUT_DIR, filename)
+    base_name = os.path.splitext(filename)[0]
+
+    cropped, processed = preprocess_image(input_path)
+    data = pytesseract.image_to_string(processed, config=tess_config).strip()
+
+    lines = [line for line in data.split("\n") if line.strip()]
+    results = []
+
+    for line in lines:
+        try:
+            translation = GoogleTranslator(source='ja', target='en').translate(line)
+            results.append(f"{line}\n→ {translation}")
+        except Exception as e:
+            results.append(f"{line}\n→ [Translation Error: {e}]")
+
+    # Save text output
+    with open(os.path.join(OUTPUT_DIR, f"{base_name}.txt"), "w", encoding="utf-8") as f:
+        for r in results:
+            f.write(r + "\n\n")
+
+    # Generate side-by-side output image
+    text_panel = draw_text_panel(cropped, results)
+    output_image = np.hstack((cropped, text_panel))
+    cv2.imwrite(os.path.join(OUTPUT_DIR, f"{base_name}_translated.jpg"), output_image)
+
 
 if __name__ == "__main__":
     os.makedirs(OUTPUT_FOLDER, exist_ok=True)
