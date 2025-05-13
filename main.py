@@ -24,6 +24,22 @@ def preprocess_image(image_path):
     denoised = cv2.fastNlMeansDenoising(thresh, h=10)
     return cropped, denoised
 
+def draw_text_panel(original_img, text_lines):
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    font_scale = 0.6
+    font_color = (0, 0, 0)
+    line_height = 30
+
+    width = original_img.shape[1]
+    height = max(original_img.shape[0], line_height * (len(text_lines) + 1))
+    panel = np.ones((height, width, 3), dtype=np.uint8) * 255
+
+    y0 = 30
+    for i, line in enumerate(text_lines):
+        cv2.putText(panel, line, (10, y0 + i * line_height), font, font_scale, font_color, 1, cv2.LINE_AA)
+
+    return panel
+
 
 if __name__ == "__main__":
     os.makedirs(OUTPUT_FOLDER, exist_ok=True)
