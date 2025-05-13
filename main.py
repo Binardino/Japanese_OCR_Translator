@@ -3,37 +3,27 @@ import cv2
 import pytesseract
 from PIL import Image, ImageDraw, ImageFont
 from deep_translator import GoogleTranslator
+import numpy as np
 
-INPUT_FOLDER = "input"
-OUTPUT_FOLDER = "output"
-LANG = "jpn"
+# Paths
+INPUT_DIR = "input"
+OUTPUT_DIR = "output"
+os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-translator = GoogleTranslator(source='ja', target='en')
+# OCR config
+tess_config = "--psm 6 -l jpn"
 
-def preprocess_image(path):
-    img = cv2.imread(path)
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    resized = cv2.resize(gray, None, fx=2, fy=2, interpolation=cv2.INTER_LINEAR)
-    return resized
+def preprocess_image(image_path):
+    image = cv2.imread(image_path)
+    # Crop to screen area (adjust values depending on your setup)
+    h, w, _ = image.shape
+    cropped = image[int(h*0.12):int(h*0.70), int(w*0.18):int(w*0.82)]
 
-def extract_text(image):
-    config = '--oem 3 --psm 6 -l jpn'
-    return pytesseract.image_to_string(image, config=config)
+    gray = cv2.cvtColor(cropped, cv2.COLOR_BGR2GRAY)
+    _, thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    denoised = cv2.fastNlMeansDenoising(thresh, h=10)
+    return cropped, denoised
 
-def draw_translation(original_path, translation):
-    base = Image.open(original_path).convert("RGB")
-    W, H = base.size
-    font = ImageFont.load_default()
-
-    # Create new image to hold original + translated
-    combined = Image.new("RGB", (W * 2, H), (255, 255, 255))
-    combined.paste(base, (0, 0))
-
-    draw = ImageDraw.Draw(combined)
-    draw.text((W + 10, 10), translation, fill=(0, 0, 0), font=font)
-
-    output_path = os.path.join(OUTPUT_FOLDER, os.path.basename(original_path))
-    combined.save(output_path)
 
 if __name__ == "__main__":
     os.makedirs(OUTPUT_FOLDER, exist_ok=True)
