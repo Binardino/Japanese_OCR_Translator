@@ -24,15 +24,18 @@ def preprocess_image(image_path):
     denoised = cv2.fastNlMeansDenoising(thresh, h=10)
     return cropped, denoised
 
-def draw_text_panel(original_img, text_lines):
-    font = cv2.FONT_HERSHEY_SIMPLEX
-    font_scale = 0.6
-    font_color = (0, 0, 0)
-    line_height = 30
+def draw_text_panel(original_img, text_lines, font_path=FONT_PATH):
+    """
+    Create a white panel with translated text printed next to the image.
 
-    width = original_img.shape[1]
-    height = max(original_img.shape[0], line_height * (len(text_lines) + 1))
-    panel = np.ones((height, width, 3), dtype=np.uint8) * 255
+    Args:
+        original_img (numpy.ndarray): The original image to match the height with.
+        text_lines (list): List of strings, each line is a Japanese sentence + its translation (alternating).
+        font_path (str): Path to the Japanese-capable TrueType font (ttc or ttf).
+
+    Returns:
+        numpy.ndarray: Panel image with text written, ready to be concatenated with the original image.
+    """
 
     y0 = 30
     for i, line in enumerate(text_lines):
