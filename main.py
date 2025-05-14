@@ -37,11 +37,38 @@ def draw_text_panel(original_img, text_lines, font_path=FONT_PATH):
         numpy.ndarray: Panel image with text written, ready to be concatenated with the original image.
     """
 
-    y0 = 30
-    for i, line in enumerate(text_lines):
-        cv2.putText(panel, line, (10, y0 + i * line_height), font, font_scale, font_color, 1, cv2.LINE_AA)
+    # Font settings
+    font_size = 20
+    line_spacing = 10
+    font = ImageFont.truetype(font_path, font_size)
 
-    return panel
+    # Estimate height
+    line_height = font_size + line_spacing
+    panel_height = max(original_img.shape[0], line_height * len(text_lines) * 2)
+    panel_width = 500
+
+    # Create blank white image
+    panel = Image.new("RGB", (panel_width, panel_height), color=(255, 255, 255))
+    draw = ImageDraw.Draw(panel)
+
+    y = 10
+    for line in text_lines:
+        if '→' in line:
+            jp, en = line.split('→', 1)
+            jp = jp.strip()
+            en = en.strip()
+            draw.text((10, y), jp, font=font, fill=(0, 0, 0))
+            y += line_height
+            draw.text((10, y), f"→ {en}", font=font, fill=(100, 100, 100))
+            y += line_height + 5
+        else:
+            draw.text((10, y), line.strip(), font=font, fill=(0, 0, 0))
+            y += line_height + 5
+
+    # Convert back to OpenCV format
+    panel_np = np.array(panel)
+    return panel_np
+
 
 def process_image(filename):
     input_path = os.path.join(INPUT_DIR, filename)
