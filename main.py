@@ -4,9 +4,14 @@ import pytesseract
 from PIL import Image, ImageDraw, ImageFont
 from deep_translator import GoogleTranslator
 import numpy as np
+from config import INPUT_DIR, OUTPUT_DIR, FONT_PATH, DICT_PATH, JAMDICT_DB
+from fugashi import Tagger
+from jamdict import Jamdict
+
+#jam = Jamdict(JAMDICT_DB)
 
 # Paths
-INPUT_DIR = "input"
+INPUT_DIR  = "input"
 OUTPUT_DIR = "output"
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
@@ -79,32 +84,37 @@ def process_image(filename):
 
     lines = [line for line in data.split("\n") if line.strip()]
     results = []
+    japanese_sentences = []
 
     for line in lines:
         try:
             translation = GoogleTranslator(source='ja', target='en').translate(line)
             results.append(f"{line}\n→ {translation}")
+            japanese_sentences.append(line)
         except Exception as e:
             results.append(f"{line}\n→ [Translation Error: {e}]")
 
     # Save text output
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
     with open(os.path.join(OUTPUT_DIR, f"{base_name}.txt"), "w", encoding="utf-8") as f:
         for r in results:
             f.write(r + "\n\n")
 
-    # Generate side-by-side output image
+    # Generate output image with only cropped area
     text_panel = draw_text_panel(cropped, results)
     output_image = np.hstack((cropped, text_panel))
     cv2.imwrite(os.path.join(OUTPUT_DIR, f"{base_name}_translated.jpg"), output_image)
 
+    # Update consolidated dictionary
+    #update_word_dictionary(japanese_sentences)
+
+
+def main():
+    for filename in os.listdir(INPUT_DIR):
+        if filename.lower().endswith(('.png', '.jpg', '.jpeg')):
+            print(f"Processing: {filename}")
+            process_image(filename)
+
 
 if __name__ == "__main__":
-    os.makedirs(OUTPUT_FOLDER, exist_ok=True)
-    for fname in os.listdir(INPUT_FOLDER):
-        fpath = os.path.join(INPUT_FOLDER, fname)
-        img = preprocess_image(fpath)
-        jp_text = extract_text(img)    
-        en_text = translator.translate(jp_text)
-        draw_translation(fpath, en_text)
-        print(f"[✓] Processed {fname}")
-        
+    main()
