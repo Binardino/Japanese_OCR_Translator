@@ -1,0 +1,20 @@
+# Screenshots and images — too large for Claude's context, not useful for code review
+input/
+input/**
+output/
+output/**
+
+# manga-ocr model cache
+.cache/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Git internals
+.git/
