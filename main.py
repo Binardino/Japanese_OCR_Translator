@@ -43,7 +43,7 @@ def draw_text_panel(original_img, text_lines, font_path=FONT_PATH):
         font_path (str): Path to the Japanese-capable TrueType font (ttc or ttf).
 
     Returns:
-        numpy.ndarray: Panel image with text written, ready to be concatenated with the original image.
+        PIL Image: Panel image with text written, ready to be concatenated with the original image.
     """
 
     # Font settings
@@ -53,7 +53,7 @@ def draw_text_panel(original_img, text_lines, font_path=FONT_PATH):
 
     # Estimate height
     line_height = font_size + line_spacing
-    panel_height = max(original_img.shape[0], line_height * len(text_lines) * 2)
+    panel_height = max(original_img.size[1], line_height * len(text_lines) * 2)
     panel_width = 500
 
     # Create blank white image
@@ -115,8 +115,8 @@ def process_image(filename):
     input_path = os.path.join(INPUT_DIR, filename)
     base_name = os.path.splitext(filename)[0]
 
-    cropped, processed = preprocess_image(input_path)
-    data = pytesseract.image_to_string(processed, config=tess_config).strip()
+    cropped = preprocess_image(input_path)
+    data    = mocr(cropped)
 
     lines = [line for line in data.split("\n") if line.strip()]
     results = []
@@ -138,7 +138,10 @@ def process_image(filename):
 
     # Generate output image with only cropped area
     text_panel = draw_text_panel(cropped, results)
-    output_image = np.hstack((cropped, text_panel))
+    #cropped is numpy array in RGB format, convert to BGR for OpenCV
+    cropped_np = cv2.cvtColor(np.array(cropped), cv2.COLOR_RGB2BGR)
+
+    output_image = np.hstack((cropped_np, text_panel))
     cv2.imwrite(os.path.join(OUTPUT_DIR, f"{base_name}_translated.jpg"), output_image)
 
     # Update consolidated dictionary
