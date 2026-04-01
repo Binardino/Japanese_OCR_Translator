@@ -1,6 +1,6 @@
 import os
 import cv2
-import pytesseract
+from manga_ocr import MangaOcr
 from PIL import Image, ImageDraw, ImageFont
 from deep_translator import GoogleTranslator
 import numpy as np
@@ -14,18 +14,24 @@ from jamdict import Jamdict
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 # OCR config
-tess_config = "--psm 6 -l jpn"
+mocr = MangaOcr()
 
 def preprocess_image(image_path):
-    image = cv2.imread(image_path)
+    """
+    Load the image and crop to the manga panel area.
+    With PIL & MangaOcr, adjust the cropping values based on your specific manga layout.
+    
+    Input : Path to the manga page image.
+    Output: Cropped image focused on the manga panel area.
+    """
+    image = Image.open(image_path)
     # Crop to screen area (adjust values depending on your setup)
-    h, w, _ = image.shape
-    cropped = image[int(h*0.12):int(h*0.70), int(w*0.18):int(w*0.82)]
+    #PIL outputs : (width, height)
+    w, h = image.size
+    #PIL crop box: (left, upper, right, lower)
+    cropped = image.crop((int(w*0.18), int(h*0.12), int(w*0.82), int(h*0.70)))
 
-    gray = cv2.cvtColor(cropped, cv2.COLOR_BGR2GRAY)
-    _, thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-    denoised = cv2.fastNlMeansDenoising(thresh, h=10)
-    return cropped, denoised
+    return cropped
 
 def draw_text_panel(original_img, text_lines, font_path=FONT_PATH):
     """
