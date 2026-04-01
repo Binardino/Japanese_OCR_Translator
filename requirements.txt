@@ -1,7 +1,0 @@
-pytesseract
-opencv-python
-Pillow
-deep-translator
-python-dotenv
-fugashi
-jamdict

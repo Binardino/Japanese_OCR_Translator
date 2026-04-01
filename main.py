@@ -11,8 +11,6 @@ from jamdict import Jamdict
 #jam = Jamdict(JAMDICT_DB)
 
 # Paths
-INPUT_DIR  = "input"
-OUTPUT_DIR = "output"
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 # OCR config
@@ -74,6 +72,38 @@ def draw_text_panel(original_img, text_lines, font_path=FONT_PATH):
     panel_np = np.array(panel)
     return panel_np
 
+"""
+def update_word_dictionary(japanese_sentences? jap_dict=JAMDICT_DB):
+    if os.path.exists(DICT_PATH):
+        with open(DICT_PATH, "r", encoding="utf-8") as f:
+            word_dict = json.load(f)
+    else:
+        word_dict = {}
+
+    tagger = Tagger()
+    jam = Jamdict(jap_dict)
+    for sentence in japanese_sentences:
+        for word in tagger(sentence):
+            surface = word.surface
+            if surface in word_dict:
+                continue
+            entry = jam.lookup(surface)
+            if entry.entries:
+                first_entry = entry.entries[0]
+                meanings = first_entry.sense_summary()
+                readings = [r.text for r in first_entry.reading_elements]
+                onyomi = [r for r in readings if "音" in r or "オン" in r]
+                kunyomi = [r for r in readings if "訓" in r or "くん" in r]
+                word_dict[surface] = {
+                    "meanings": meanings,
+                    "readings": readings,
+                    "kunyomi": kunyomi,
+                    "onyomi": onyomi
+                }
+
+    with open(DICT_PATH, "w", encoding="utf-8") as f:
+        json.dump(word_dict, f, ensure_ascii=False, indent=2)
+"""
 
 def process_image(filename):
     input_path = os.path.join(INPUT_DIR, filename)
