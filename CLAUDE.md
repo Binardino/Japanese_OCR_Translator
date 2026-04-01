@@ -23,11 +23,12 @@ Python OCR pipeline to translate screenshots from Japanese PS Vita / 3DS games.
 The user is learning Japanese by playing Japanese games and wants to automate screenshot translation.
 
 **Tech stack:**
-- `manga-ocr` — manga/game-specialized OCR (replaces Tesseract)
+- `manga-ocr` — manga/game-specialized OCR (replaces Tesseract) ✓
 - `google-generativeai` — Gemini API for translation (replaces Google Translate)
 - `watchdog` — real-time monitoring of the `input/` folder
-- `opencv-python` + `Pillow` — image preprocessing and rendering
+- `opencv-python` + `Pillow` — image preprocessing and rendering ✓
 - `fugashi` + `jamdict` — Japanese tokenization and vocabulary dictionary
+- `poetry` — dependency management ✓
 - Docker — containerization
 
 **Workflow:**
@@ -61,8 +62,8 @@ Japanese_OCR_Translator/
 
 ## Development Phases (see ROADMAP.md)
 
-- **Phase 0** — Project cleanup
-- **Phase 1** — manga-ocr (replaces Tesseract)
+- **Phase 0** — Project cleanup ✓
+- **Phase 1** — manga-ocr (replaces Tesseract) ✓ — pending test
 - **Phase 2** — Gemini API (replaces Google Translate)
 - **Phase 3** — Vocabulary dictionary (Jamdict, already coded but disabled)
 - **Phase 4** — watchdog (automation)
@@ -73,8 +74,11 @@ Japanese_OCR_Translator/
 ## Important Technical Notes
 
 - `FONT_PATH` is required in `.env` (NotoSansCJK for Japanese character rendering)
-- `GEMINI_API_KEY` is required in `.env`
+- `GEMINI_API_KEY` is required in `.env` (Phase 2)
 - The crop (12%-70% height, 18%-82% width) is calibrated for PS Vita — adjust if needed
-- `MangaOcr()` must be instantiated ONCE at module level (heavy model ~400MB)
+- `MangaOcr()` is instantiated ONCE at module level as `mocr` (heavy model ~400MB)
+- Image pipeline: PIL throughout, convert to numpy BGR only for `cv2.imwrite()` at the end
 - `update_word_dictionary()` is in `main.py` but commented out — to be enabled in Phase 3
 - The Jamdict DB path (`/root/.jamdict/jamdict.db`) must be verified after `python3 -m jamdict import`
+- manga-ocr returns a single string per image (not newline-separated lines)
+- Dependencies managed with Poetry (`pyproject.toml` + `poetry.lock`), Python 3.11
