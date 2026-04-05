@@ -1,6 +1,8 @@
 # Screenshots and images — too large for Claude's context, not useful for code review
 input/
 input/**
+data/
+data/**
 output/
 output/**
 

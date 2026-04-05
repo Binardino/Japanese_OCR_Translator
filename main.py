@@ -2,9 +2,8 @@ import os
 import cv2
 from manga_ocr import MangaOcr
 from PIL import Image, ImageDraw, ImageFont
-from deep_translator import GoogleTranslator
 import numpy as np
-from config import INPUT_DIR, OUTPUT_DIR, FONT_PATH, DICT_PATH, JAMDICT_DB
+from config import INPUT_DIR, OUTPUT_DIR, FONT_PATH, DICT_PATH, JAMDICT_DB, GEMINI_API_KEY
 from fugashi import Tagger
 from jamdict import Jamdict
 
@@ -130,12 +129,6 @@ def process_image(filename):
         except Exception as e:
             results.append(f"{line}\n→ [Translation Error: {e}]")
 
-    # Save text output
-    os.makedirs(OUTPUT_DIR, exist_ok=True)
-    with open(os.path.join(OUTPUT_DIR, f"{base_name}.txt"), "w", encoding="utf-8") as f:
-        for r in results:
-            f.write(r + "\n\n")
-
     # Generate output image with only cropped area
     text_panel = draw_text_panel(cropped, results)
     #cropped is numpy array in RGB format, convert to BGR for OpenCV
@@ -144,16 +137,24 @@ def process_image(filename):
     output_image = np.hstack((cropped_np, text_panel))
     cv2.imwrite(os.path.join(OUTPUT_DIR, f"{base_name}_translated.jpg"), output_image)
 
-    # Update consolidated dictionary
-    #update_word_dictionary(japanese_sentences)
-
+    return results
 
 def main():
+    all_results = {}
     for filename in os.listdir(INPUT_DIR):
         if filename.lower().endswith(('.png', '.jpg', '.jpeg')):
             print(f"Processing: {filename}")
-            process_image(filename)
+            all_results[filename] = process_image(filename)
 
+        # Save text output
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
+    with open(os.path.join(OUTPUT_DIR, f"output.md"), "w", encoding="utf-8") as f:
+        for key ,value in all_results.items():
+            f.write(f"### {key}  \n")
+            for trad in value:
+                trad = trad.replace("\n", "")
+                f.write(f"- {trad} \n")
+            f.write("\n")
 
 if __name__ == "__main__":
     main()

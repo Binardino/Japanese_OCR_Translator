@@ -6,6 +6,10 @@
 input/
 input/**
 
+# Data folder (game screenshots, not to be committed)
+data/
+data/**
+
 # Output results
 output/
 output/**
