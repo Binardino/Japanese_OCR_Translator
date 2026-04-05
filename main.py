@@ -1,6 +1,7 @@
 import os
 import cv2
 from manga_ocr import MangaOcr
+from google import genai
 from PIL import Image, ImageDraw, ImageFont
 import numpy as np
 from config import INPUT_DIR, OUTPUT_DIR, FONT_PATH, DICT_PATH, JAMDICT_DB, GEMINI_API_KEY
@@ -8,6 +9,8 @@ from fugashi import Tagger
 from jamdict import Jamdict
 
 #jam = Jamdict(JAMDICT_DB)
+# The client gets the API key from the environment variable `GEMINI_API_KEY`.
+client = genai.Client(api_key=GEMINI_API_KEY)
 
 # Paths
 os.makedirs(OUTPUT_DIR, exist_ok=True)
@@ -116,18 +119,18 @@ def process_image(filename):
 
     cropped = preprocess_image(input_path)
     data    = mocr(cropped)
-
-    lines = [line for line in data.split("\n") if line.strip()]
     results = []
-    japanese_sentences = []
 
-    for line in lines:
-        try:
-            translation = GoogleTranslator(source='ja', target='en').translate(line)
-            results.append(f"{line}\n→ {translation}")
-            japanese_sentences.append(line)
-        except Exception as e:
-            results.append(f"{line}\n→ [Translation Error: {e}]")
+    try:
+        translation = client.models.generate_content(
+                model="gemini-2.0-flash", 
+                contents=f"Translate from Japanese in English the value {data}"
+                )
+        print(translation.text)
+
+        results.append(f"{data}\n→ {translation.text}")
+    except Exception as e:
+        results.append(f"{data}\n→ [Translation Error: {e}]")
 
     # Generate output image with only cropped area
     text_panel = draw_text_panel(cropped, results)
@@ -139,22 +142,35 @@ def process_image(filename):
 
     return results
 
-def main():
+def main(existing_files=None):
+    if existing_files is None:
+        existing_files = set()
+
     all_results = {}
     for filename in os.listdir(INPUT_DIR):
         if filename.lower().endswith(('.png', '.jpg', '.jpeg')):
+            if filename in existing_files:
+                print(f"Skipping (already processed): {filename}")
+                continue
             print(f"Processing: {filename}")
             all_results[filename] = process_image(filename)
 
-        # Save text output
+    # Save text output
     os.makedirs(OUTPUT_DIR, exist_ok=True)
-    with open(os.path.join(OUTPUT_DIR, f"output.md"), "w", encoding="utf-8") as f:
-        for key ,value in all_results.items():
-            f.write(f"### {key}  \n")
+    with open(os.path.join(OUTPUT_DIR, "output.md"), "a", encoding="utf-8") as f:
+        for key, value in all_results.items():
+            f.write(f"### {key}\n")
             for trad in value:
-                trad = trad.replace("\n", "")
-                f.write(f"- {trad} \n")
+                trad = trad.replace("\n", " ")
+                f.write(f"- {trad}\n")
             f.write("\n")
 
 if __name__ == "__main__":
-    main()
+    existing_files = set()
+    output_md = os.path.join(OUTPUT_DIR, "output.md")
+    if os.path.exists(output_md):
+        with open(output_md, "r", encoding="utf-8") as f:
+            for line in f:
+                if line.startswith("### "):
+                    existing_files.add(line.strip()[4:])
+    main(existing_files)
