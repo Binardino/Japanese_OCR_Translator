@@ -124,7 +124,27 @@ def process_image(filename):
     try:
         translation = client.models.generate_content(
                 model="gemini-2.0-flash", 
-                contents=f"Translate from Japanese in English the value {data}"
+                contents=f"""1. The Role
+                You have to translate the below input text - from Japanese - to English.
+                Preserve the tone of JRPG dialogue. 
+                Character names, spell names and item names should stay in their original form if untranslatable.
+
+                2. The Context
+                This current API call is part of a Python data pipeline. 
+                The user is a Japanese learner, using video games in Japanese to learn & practice Japanse. 
+                Extract dialogues and scenes from video game screenshots (from Dsi / New 3DS games or from PS Vita / PSP games).
+                The input text below is the raw string issued from the screenshot and identified by the Python library manga-ocr.
+
+                3. Expected Output:
+                TRANSLATION:
+                Return only the translated text, no explanation, no commentary.
+
+                VOCABULARY
+                List the 3 - 5 most noteworthy vocabulary words or interesting grammar expression to remember from this extract
+                - <word in kanji> (<reading>) : <meaning in English>
+
+                Input data:
+                {data}"""
                 )
         print(translation.text)
 
