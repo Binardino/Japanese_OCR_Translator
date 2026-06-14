@@ -105,8 +105,27 @@ def correct_perspective(image, corners):
     return Image.fromarray(warped)
 
 def crop_dialogue(image, ratio=0.30):
-    # return PIL image croped on dialogue box
-    pass
+    """
+    Crop the bottom portion of the screen where the dialogue box appears.
+
+    On a perspective-corrected 3DS screen, the dialogue box is consistently
+    located in the bottom ~30% of the image. This function isolates that zone
+    for OCR processing.
+
+    Note: only works reliably for dialogue screens. Menu screens or full-text
+    screens (e.g. Pokémon team selection) are not supported by this approach.
+
+    Args:
+        image (PIL.Image.Image): Perspective-corrected screen image.
+        ratio (float): Fraction of the image height to keep from the bottom. Default: 0.30.
+
+    Returns:
+        PIL.Image.Image: Cropped image containing only the dialogue box area.
+    """
+    width, height = image.size
+    top = height - (ratio * height)  # start of the bottom ratio% zone
+
+    return image.crop((0, int(top), width, height))
 
 def enhance_contrast(image):
     # return PIL image with high contrast & cleaner
