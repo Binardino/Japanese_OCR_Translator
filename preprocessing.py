@@ -37,27 +37,70 @@ def detect_screen(image):
 
 
 def order_corners(corners):
+    """
+    Sort 4 corner points into a consistent order: top-left, top-right, bottom-right, bottom-left.
+
+    OpenCV returns contour points in arbitrary order. This function reorders them
+    so that perspective transform math works correctly.
+
+    The sorting relies on two geometric properties:
+      - top-left has the smallest sum of (x + y)
+      - bottom-right has the largest sum of (x + y)
+      - top-right has the smallest difference of (x - y)
+      - bottom-left has the largest difference of (x - y)
+
+    Args:
+        corners (numpy.ndarray): Array of shape (4, 2) with unordered corner coordinates.
+
+    Returns:
+        numpy.ndarray: Array of shape (4, 2), float32, ordered as [TL, TR, BR, BL].
+    """
     ordered = np.zeros((4, 2), dtype="float32")
-    s = corners.sum(axis=1)
-    ordered[0] = corners[np.argmin(s)]  # top-left
-    ordered[2] = corners[np.argmax(s)]  # bottom-right
-    d = np.diff(corners, axis=1)
-    ordered[1] = corners[np.argmin(d)]  # top-right
-    ordered[3] = corners[np.argmax(d)]  # bottom-left
+
+    s = corners.sum(axis=1)             # x + y for each point
+    ordered[0] = corners[np.argmin(s)]  # top-left     — smallest x+y
+    ordered[2] = corners[np.argmax(s)]  # bottom-right — largest  x+y
+
+    d = np.diff(corners, axis=1)        # x - y for each point
+    ordered[1] = corners[np.argmin(d)]  # top-right    — smallest x-y
+    ordered[3] = corners[np.argmax(d)]  # bottom-left  — largest  x-y
+
     return ordered
 
 
 def correct_perspective(image, corners):
-    # returns PIL image corrected
-    orderned_corners = order_corners(corners)
+    """
+    Apply a perspective transform to produce a flat, front-facing view of the 3DS screen.
 
-    targeted_width  = np.linalg.norm(orderned_corners[0] - orderned_corners[1]) #compute top edge width   i.e [0] top-left -> [1] = top-right
-    targeted_height = np.linalg.norm(orderned_corners[0] - orderned_corners[3]) #compute left edge height i.e [0] top-left -> [3] = bottom left
+    Takes the 4 detected corners (possibly skewed from a camera angle) and maps them
+    onto a straight rectangle using a homography matrix. The output dimensions are
+    derived from the detected screen size to preserve the original aspect ratio.
 
-    dst_pts = np.array([[0,0], [targeted_width,0], [targeted_width,targeted_height], [0,targeted_height]], dtype="float32")
-    M       = cv2.getPerspectiveTransform(orderned_corners, dst_pts)
-    img_np  = np.array(image)
-    warped  = cv2.warpPerspective(img_np, M, (int(targeted_width), int(targeted_height)))
+    Args:
+        image (PIL.Image.Image): Raw smartphone photo.
+        corners (numpy.ndarray): Array of shape (4, 2) from detect_screen().
+
+    Returns:
+        PIL.Image.Image: Perspective-corrected image of the screen.
+    """
+    ordered = order_corners(corners)
+
+    # Measure the screen's real dimensions from the detected corners
+    targeted_width  = np.linalg.norm(ordered[0] - ordered[1])  # top-left → top-right (top edge)
+    targeted_height = np.linalg.norm(ordered[0] - ordered[3])  # top-left → bottom-left (left edge)
+
+    # Define the destination rectangle: a flat [0,0]→[w,h] rectangle
+    dst_pts = np.array(
+        [[0, 0], [targeted_width, 0], [targeted_width, targeted_height], [0, targeted_height]],
+        dtype="float32"
+    )
+
+    # Compute the homography matrix (3×3) that maps src corners → dst rectangle
+    M = cv2.getPerspectiveTransform(ordered, dst_pts)
+
+    # Apply the transform — OpenCV needs a numpy array, not PIL
+    img_np = np.array(image)
+    warped = cv2.warpPerspective(img_np, M, (int(targeted_width), int(targeted_height)))
 
     return Image.fromarray(warped)
 
