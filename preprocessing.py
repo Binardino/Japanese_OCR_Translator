@@ -128,8 +128,30 @@ def crop_dialogue(image, ratio=0.30):
     return image.crop((0, int(top), width, height))
 
 def enhance_contrast(image):
-    # return PIL image with high contrast & cleaner
-    pass
+    """
+    Improve text legibility using CLAHE contrast enhancement followed by sharpening.
+
+    Two-step process:
+      1. CLAHE (Contrast Limited Adaptive Histogram Equalization): improves contrast
+         locally, tile by tile, which handles uneven lighting on the 3DS screen better
+         than a global contrast adjustment. Operates on grayscale only.
+      2. PIL Sharpness: adds edge crispness to the result, helping OCR distinguish
+         character strokes from background.
+
+    Args:
+        image (PIL.Image.Image): Cropped dialogue box image.
+
+    Returns:
+        PIL.Image.Image: Contrast-enhanced and sharpened image, in RGB mode.
+    """
+    clahe    = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+    img_gray = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2GRAY)  # CLAHE requires single-channel input
+    enhanced = clahe.apply(img_gray)
+    img_rgb  = cv2.cvtColor(enhanced, cv2.COLOR_GRAY2RGB)          # back to RGB — PIL and manga-ocr expect 3 channels
+    img_pil  = Image.fromarray(img_rgb)                            # numpy → PIL
+
+    return ImageEnhance.Sharpness(img_pil).enhance(2.0)
+
 
 def super_resolve(image, scale=2):
     # returns ML upscaled image
