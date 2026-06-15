@@ -1,8 +1,9 @@
 from PIL import Image, ImageEnhance
 import cv2
 import numpy as np
+from pathlib import Path
 
-def detect_screen(image):
+def detect_screen(image, debug=False):
     """
     Detect the 3DS screen in a smartphone photo using contour detection.
 
@@ -11,6 +12,7 @@ def detect_screen(image):
 
     Args:
         image (PIL.Image.Image): Raw smartphone photo.
+        debug (bool): If True, saves debug_canny.jpg and prints contour info. Default: False.
 
     Returns:
         numpy.ndarray: Array of shape (4, 2) with the screen's corner coordinates,
@@ -25,18 +27,20 @@ def detect_screen(image):
     kernel   = np.ones((3, 3), np.uint8)
     edges    = cv2.dilate(edges, kernel, iterations=1)
 
-    Image.fromarray(edges).save("debug_canny.jpg")
+    if debug:
+        Image.fromarray(edges).save("debug_canny.jpg")
 
     contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
     # Sort largest to smallest — the 3DS screen is the biggest rectangle in the photo
     contours = sorted(contours, key=cv2.contourArea, reverse=True)
 
-    print(f"Contours found: {len(contours)}")
-    for i, contour in enumerate(contours[:5]):  # top 5 only
-        hull = cv2.convexHull(contour) 
-        approx = cv2.approxPolyDP(hull, 0.05 * cv2.arcLength(hull, True), True)
-        print(f"  contour {i}: area={cv2.contourArea(contour):.0f}, sides={len(approx)}")
+    if debug:
+        print(f"Contours found: {len(contours)}")
+        for i, contour in enumerate(contours[:5]):  # top 5 only
+            hull = cv2.convexHull(contour) 
+            approx = cv2.approxPolyDP(hull, 0.05 * cv2.arcLength(hull, True), True)
+            print(f"  contour {i}: area={cv2.contourArea(contour):.0f}, sides={len(approx)}")
 
 
 
@@ -50,12 +54,11 @@ def detect_screen(image):
         if len(approx) == 4:
             return approx.reshape(4, 2)  #numpy array of corners
 
-    # temporary debug — draw detected contour on image
-    debug_img = cv2.cvtColor(img_gray, cv2.COLOR_GRAY2RGB)
-    cv2.drawContours(debug_img, [approx], -1, (0, 255, 0), 10)
-    Image.fromarray(debug_img).save("debug_contours.jpg")
+    if debug:  # draw the largest contour for diagnosis when no quadrilateral was found
+        debug_img = cv2.cvtColor(img_gray, cv2.COLOR_GRAY2RGB)
+        cv2.drawContours(debug_img, [approx], -1, (0, 255, 0), 10)
+        Image.fromarray(debug_img).save("debug_contours.jpg")
 
-    
     return None  # no quadrilateral found — caller should use a fixed-crop fallback
 
 
@@ -176,34 +179,70 @@ def enhance_contrast(image):
     return ImageEnhance.Sharpness(img_pil).enhance(2.0)
 
 def super_resolve(image, scale=2):
+    """
+    Upscale the image by a given factor using Lanczos resampling.
+
+    PIL LANCZOS is a mathematical interpolation filter that produces sharper results
+    than bilinear or bicubic for text-heavy images. Scale ×2 is sufficient to go from
+    ~200px dialogue crops to ~400px, which helps manga-ocr recognize thin kanji strokes.
+
+    Note: a learned super-resolution model (Real-ESRGAN, spandrel) would produce better
+    results on low-quality console photos, but LANCZOS is a reliable and dependency-free fallback.
+
+    Args:
+        image (PIL.Image.Image): Input image (any size).
+        scale (int): Upscaling factor. Default: 2.
+
+    Returns:
+        PIL.Image.Image: Upscaled image of size (w*scale, h*scale).
+    """
     w, h = image.size
     return image.resize((w * scale, h * scale), Image.LANCZOS)
 
 
 def preprocess(image_path, debug=False):
-    # full pipeline - chains 5 functions together
+    """
+    Run the full preprocessing pipeline on a smartphone photo of a 3DS screen.
+
+    Chains 5 stages in order:
+      1. detect_screen()       — locate the 3DS screen frame via quadrilateral contour detection
+      2. correct_perspective() — flatten the skewed camera angle into a frontal rectangle
+      3. crop_dialogue()       — keep only the bottom 30% where the dialogue box appears
+      4. enhance_contrast()    — CLAHE + sharpening to improve OCR readability
+      5. super_resolve()       — ×2 Lanczos upscaling for better character recognition
+
+    If detect_screen() fails (returns None), the raw photo is passed directly to
+    crop_dialogue() as a fixed-crop fallback — no perspective correction applied.
+
+    Args:
+        image_path (str | Path): Path to the input smartphone photo.
+        debug (bool): If True, saves intermediate images at each stage.
+                      Files are named debug_<stem>_01_correct_perspective.jpg etc.
+
+    Returns:
+        PIL.Image.Image: Preprocessed image, ready for manga-ocr or Gemini Vision.
+    """
     inputs = Image.open(image_path)
-    stem  = Path(image_path).stem  # "20260218_215050" without extension
+    stem   = Path(image_path).stem
 
-
-    corners = detect_screen(image=inputs)
+    corners = detect_screen(image=inputs, debug=debug)
     if corners is not None:
         image    = correct_perspective(inputs, corners)
         if debug:
-            image.save("debug_01_correct_perspective.jpg")
-    else: 
-        image = inputs
+            image.save(f"debug_{stem}_01_correct_perspective.jpg")
+    else:
+        image = inputs  # fallback: no perspective correction
 
     dialogue = crop_dialogue(image)
     if debug:
-        dialogue.save("debug_01_crop_dialogue.jpg")
+        dialogue.save(f"debug_{stem}_02_crop_dialogue.jpg")
 
     enhanced = enhance_contrast(dialogue)
     if debug:
-        enhanced.save("debug_01_enhance_contrast.jpg")
+        enhanced.save(f"debug_{stem}_03_enhance_contrast.jpg")
 
     output   = super_resolve(enhanced)
     if debug:
-        output.save("debug_01_super_resolve.jpg")
-    
+        output.save(f"debug_{stem}_04_super_resolve.jpg")
+
     return output
