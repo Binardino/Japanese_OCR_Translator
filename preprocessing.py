@@ -20,19 +20,42 @@ def detect_screen(image):
     img_gray = cv2.cvtColor(img_np, cv2.COLOR_RGB2GRAY)
 
     # Detect edges — strong pixel gradients mark the screen borders
-    edges    = cv2.Canny(img_gray, 50, 150)
+    img_blur = cv2.GaussianBlur(img_gray, (9, 9), 0)
+    edges    = cv2.Canny(img_blur, 80, 160)
+    kernel   = np.ones((3, 3), np.uint8)
+    edges    = cv2.dilate(edges, kernel, iterations=1)
+
+    Image.fromarray(edges).save("debug_canny.jpg")
 
     contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
     # Sort largest to smallest — the 3DS screen is the biggest rectangle in the photo
     contours = sorted(contours, key=cv2.contourArea, reverse=True)
 
-    for contour in contours:
-        # Simplify contour shape — tolerance = 2% of perimeter
-        approx = cv2.approxPolyDP(contour, 0.02 * cv2.arcLength(contour, True), True)
-        if len(approx) == 4:
-            return approx.reshape(4, 2) #numpy array of corners
+    print(f"Contours found: {len(contours)}")
+    for i, contour in enumerate(contours[:5]):  # top 5 only
+        hull = cv2.convexHull(contour) 
+        approx = cv2.approxPolyDP(hull, 0.05 * cv2.arcLength(hull, True), True)
+        print(f"  contour {i}: area={cv2.contourArea(contour):.0f}, sides={len(approx)}")
 
+
+
+    min_area = 0.10 * img_gray.shape[0] * img_gray.shape[1]
+    for contour in contours:
+        if cv2.contourArea(contour) < min_area:
+            break
+        # Simplify contour shape — tolerance = 2% of perimeter
+        hull  = cv2.convexHull(contour)
+        approx = cv2.approxPolyDP(hull, 0.05 * cv2.arcLength(hull, True), True)
+        if len(approx) == 4:
+            return approx.reshape(4, 2)  #numpy array of corners
+
+    # temporary debug — draw detected contour on image
+    debug_img = cv2.cvtColor(img_gray, cv2.COLOR_GRAY2RGB)
+    cv2.drawContours(debug_img, [approx], -1, (0, 255, 0), 10)
+    Image.fromarray(debug_img).save("debug_contours.jpg")
+
+    
     return None  # no quadrilateral found — caller should use a fixed-crop fallback
 
 
