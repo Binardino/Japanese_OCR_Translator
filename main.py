@@ -1,17 +1,16 @@
 import os
 import cv2
 import preprocessing
-from google import genai
 from PIL import Image, ImageDraw, ImageFont
 import numpy as np
-from config import INPUT_DIR, OUTPUT_DIR, FONT_PATH, DICT_PATH, JAMDICT_DB, GEMINI_API_KEY
-import time
+from config import INPUT_DIR, OUTPUT_DIR, FONT_PATH, DICT_PATH, JAMDICT_DB
+from manga_ocr import MangaOcr
 #jam = Jamdict(JAMDICT_DB)
+import ollama
 
-# The client gets the API key from the environment variable `GEMINI_API_KEY`.
-client = genai.Client(api_key=GEMINI_API_KEY)
+mocr = MangaOcr()
 
-gemini_translate_prompt = """1. The Role
+LLM_translate_prompt = """1. The Role
                 You have to translate the below input text - from Japanese - to English.
                 Preserve the tone of JRPG dialogue. 
                 Character names, spell names and item names should stay in their original form if untranslatable.
@@ -20,8 +19,7 @@ gemini_translate_prompt = """1. The Role
                 This current API call is part of a Python data pipeline. 
                 The user is a Japanese learner, using video games in Japanese to learn & practice Japanse. 
                 Extract dialogues and scenes from video game screenshots (from Dsi / New 3DS games or from PS Vita / PSP games).
-                The input image is a raw photo of the videogame console made by phone. 
-                Identify the console screen and target the text contents in the game.
+                The text below was extracted via OCR from a Japanese game screenshot (PS Vita or 3DS). OCR may contain minor errors.
 
                 3. Expected Output:
                 TRANSLATION:
@@ -81,24 +79,35 @@ def draw_text_panel(original_img, text_lines, font_path=FONT_PATH):
     return panel_np
 
 def process_image(filename):
-    input_path = os.path.join(INPUT_DIR, filename)
-    base_name = os.path.splitext(filename)[0]
+    """
+    Run the full pipeline on a single image: preprocess → OCR → translate.
 
-    image = Image.open(input_path)
+    Args:
+        filename (str): Image filename (not full path) from INPUT_DIR.
+
+    Returns:
+        list[str]: List containing the translated text (or error message).
+    """
+    input_path = os.path.join(INPUT_DIR, filename)
+    base_name  = os.path.splitext(filename)[0]
+
+    image   = preprocessing.preprocess(input_path)
+    jp_text = mocr(image)
+    
     results = []
 
     try:
-        translation = client.models.generate_content(
-                model="gemini-2.0-flash", 
-                contents=[image, gemini_translate_prompt]
+        response = ollama.chat(
+                model="qwen2.5:7b",
+                messages=[{"role": "user", "content": f"{LLM_translate_prompt}\n\nText to translate:\n{jp_text}"}]
                 )
-        print(translation.text)
+        print(response["message"]["content"])
+        results.append(response["message"]["content"])
 
-        results.append(f"{translation.text}")
     except Exception as e:
+        print(f"[FULL ERROR]: {e}")
         results.append(f"[Translation Error: {e}]")
 
-    time.sleep(7)
     # Generate output image with only cropped area
     text_panel = draw_text_panel(image, results)
     cropped_np = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)  # PIL is RGB, cv2.imwrite expects BGR
@@ -109,6 +118,15 @@ def process_image(filename):
     return results
 
 def main(existing_files=None):
+    """
+    Process all images in INPUT_DIR, skipping files already listed in output.md.
+
+    Writes results to output/output.md and saves a side-by-side output image
+    for each processed file.
+
+    Args:
+        existing_files (set): Filenames already processed. Default: empty set.
+    """
     if existing_files is None:
         existing_files = set()
 
