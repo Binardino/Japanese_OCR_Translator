@@ -152,11 +152,35 @@ def enhance_contrast(image):
 
     return ImageEnhance.Sharpness(img_pil).enhance(2.0)
 
-
 def super_resolve(image, scale=2):
-    # returns ML upscaled image
-    pass
+    w, h = image.size
+    return image.resize((w * scale, h * scale), Image.LANCZOS)
+
 
 def preprocess(image_path, debug=False):
     # full pipeline - chains 5 functions together
-    pass
+    inputs = Image.open(image_path)
+    stem  = Path(image_path).stem  # "20260218_215050" without extension
+
+
+    corners = detect_screen(image=inputs)
+    if corners is not None:
+        image    = correct_perspective(inputs, corners)
+        if debug:
+            image.save("debug_01_correct_perspective.jpg")
+    else: 
+        image = inputs
+
+    dialogue = crop_dialogue(image)
+    if debug:
+        dialogue.save("debug_01_crop_dialogue.jpg")
+
+    enhanced = enhance_contrast(dialogue)
+    if debug:
+        enhanced.save("debug_01_enhance_contrast.jpg")
+
+    output   = super_resolve(enhanced)
+    if debug:
+        output.save("debug_01_super_resolve.jpg")
+    
+    return output
