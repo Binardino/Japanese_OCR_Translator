@@ -1,5 +1,6 @@
 import os
 import cv2
+import preprocessing
 from google import genai
 from PIL import Image, ImageDraw, ImageFont
 import numpy as np
@@ -7,32 +8,32 @@ from config import INPUT_DIR, OUTPUT_DIR, FONT_PATH, DICT_PATH, JAMDICT_DB, GEMI
 import time
 #jam = Jamdict(JAMDICT_DB)
 
-DEBUG = False
 # The client gets the API key from the environment variable `GEMINI_API_KEY`.
 client = genai.Client(api_key=GEMINI_API_KEY)
+
+gemini_translate_prompt = """1. The Role
+                You have to translate the below input text - from Japanese - to English.
+                Preserve the tone of JRPG dialogue. 
+                Character names, spell names and item names should stay in their original form if untranslatable.
+
+                2. The Context
+                This current API call is part of a Python data pipeline. 
+                The user is a Japanese learner, using video games in Japanese to learn & practice Japanse. 
+                Extract dialogues and scenes from video game screenshots (from Dsi / New 3DS games or from PS Vita / PSP games).
+                The input image is a raw photo of the videogame console made by phone. 
+                Identify the console screen and target the text contents in the game.
+
+                3. Expected Output:
+                TRANSLATION:
+                Return only the translated text, no explanation, no commentary.
+
+                VOCABULARY
+                List the 3 - 5 most noteworthy vocabulary words or interesting grammar expression to remember from this extract
+                - <word in kanji> (<reading>) : <meaning in English>"""
 
 # Paths
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-def preprocess_image(image_path):
-    """
-    Load the image and crop to the manga panel area.
-    With PIL & MangaOcr, adjust the cropping values based on your specific manga layout.
-    
-    Input : Path to the manga page image.
-    Output: Cropped image focused on the manga panel area.
-    """
-    image = Image.open(image_path)
-    # Crop to screen area (adjust values depending on your setup)
-    #PIL outputs : (width, height)
-    w, h = image.size
-    #PIL crop box: (left, upper, right, lower)
-    cropped = image.crop((int(w*0.18), int(h*0.12), int(w*0.82), int(h*0.70)))
-
-    if DEBUG:
-        cropped.save(f"{image_path}_cropped.jpg")
-
-    return cropped
 
 def draw_text_panel(original_img, text_lines, font_path=FONT_PATH):
     """
@@ -79,70 +80,17 @@ def draw_text_panel(original_img, text_lines, font_path=FONT_PATH):
     panel_np = np.array(panel)
     return panel_np
 
-"""
-def update_word_dictionary(japanese_sentences? jap_dict=JAMDICT_DB):
-    if os.path.exists(DICT_PATH):
-        with open(DICT_PATH, "r", encoding="utf-8") as f:
-            word_dict = json.load(f)
-    else:
-        word_dict = {}
-
-    tagger = Tagger()
-    jam = Jamdict(jap_dict)
-    for sentence in japanese_sentences:
-        for word in tagger(sentence):
-            surface = word.surface
-            if surface in word_dict:
-                continue
-            entry = jam.lookup(surface)
-            if entry.entries:
-                first_entry = entry.entries[0]
-                meanings = first_entry.sense_summary()
-                readings = [r.text for r in first_entry.reading_elements]
-                onyomi = [r for r in readings if "音" in r or "オン" in r]
-                kunyomi = [r for r in readings if "訓" in r or "くん" in r]
-                word_dict[surface] = {
-                    "meanings": meanings,
-                    "readings": readings,
-                    "kunyomi": kunyomi,
-                    "onyomi": onyomi
-                }
-
-    with open(DICT_PATH, "w", encoding="utf-8") as f:
-        json.dump(word_dict, f, ensure_ascii=False, indent=2)
-"""
-
 def process_image(filename):
     input_path = os.path.join(INPUT_DIR, filename)
     base_name = os.path.splitext(filename)[0]
 
-    #preprocess_image no longer needed for now
-    #cropped = preprocess_image(input_path)
     image = Image.open(input_path)
     results = []
 
     try:
         translation = client.models.generate_content(
                 model="gemini-2.0-flash", 
-                contents=[image, f"""1. The Role
-                You have to translate the below input text - from Japanese - to English.
-                Preserve the tone of JRPG dialogue. 
-                Character names, spell names and item names should stay in their original form if untranslatable.
-
-                2. The Context
-                This current API call is part of a Python data pipeline. 
-                The user is a Japanese learner, using video games in Japanese to learn & practice Japanse. 
-                Extract dialogues and scenes from video game screenshots (from Dsi / New 3DS games or from PS Vita / PSP games).
-                The input image is a raw photo of the videogame console made by phone. 
-                Identify the console screen and target the text contents in the game.
-
-                3. Expected Output:
-                TRANSLATION:
-                Return only the translated text, no explanation, no commentary.
-
-                VOCABULARY
-                List the 3 - 5 most noteworthy vocabulary words or interesting grammar expression to remember from this extract
-                - <word in kanji> (<reading>) : <meaning in English>"""]
+                contents=[image, gemini_translate_prompt]
                 )
         print(translation.text)
 
@@ -153,8 +101,7 @@ def process_image(filename):
     time.sleep(7)
     # Generate output image with only cropped area
     text_panel = draw_text_panel(image, results)
-    #cropped is numpy array in RGB format, convert to BGR for OpenCV
-    cropped_np = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
+    cropped_np = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)  # PIL is RGB, cv2.imwrite expects BGR
 
     output_image = np.hstack((cropped_np, text_panel))
     cv2.imwrite(os.path.join(OUTPUT_DIR, f"{base_name}_translated.jpg"), output_image)
