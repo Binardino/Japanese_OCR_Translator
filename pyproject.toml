@@ -1,27 +1,26 @@
 [project]
 name = "japanese-ocr-translator"
 version = "0.1.0"
-description = ""
+description = "Japanese OCR detection & translator from video game console screen images"
 authors = [
     {name = "Binardino",email = "langlois.robin@gmail.com"}
 ]
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
-    "manga-ocr (>=0.1.14,<0.2.0)",
-    "opencv-python (>=4.13.0.92,<5.0.0.0)",
-    "pillow (>=12.1.1,<13.0.0)",
-    "python-dotenv (>=1.2.2,<2.0.0)",
-    "fugashi (>=1.5.2,<2.0.0)",
-    "jamdict (>=0.1a11.post2,<0.2)",
-    "numpy (>=2.4.4,<3.0.0)",
-    "watchdog (>=6.0.0,<7.0.0)",
-    "google-genai (>=1.70.0,<2.0.0)"
+    "manga-ocr>=0.1.14",
+    "opencv-python>=4.13.0",
+    "pillow>=12.1.1",
+    "python-dotenv>=1.2.2",
+    "fugashi>=1.5.2",
+    "jamdict>=0.1a11.post2",
+    "numpy>=2.4.4",
+    "watchdog>=6.0.0",
+    "google-genai>=1.70.0",
+    "super-image>=0.2.0",
+    "ipykernel>=7.3.0",
+    "ollama>=0.6.2",
 ]
 
-[tool.poetry] 
-package-mode = false
-
-[build-system]
-requires = ["poetry-core>=2.0.0,<3.0.0"]
-build-backend = "poetry.core.masonry.api"
+[tool.uv]
+package = false
