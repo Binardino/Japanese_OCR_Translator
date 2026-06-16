@@ -6,28 +6,11 @@ import numpy as np
 from config import INPUT_DIR, OUTPUT_DIR, FONT_PATH, MODEL
 import ollama
 from io import BytesIO
+from pathlib import Path
 
+# Load prompt once at startup — kept in a separate file so prompt edits don't require touching Python code
+LLM_translate_prompt = (Path(__file__).parent / "prompts" / "translate.txt").read_text()
 
-LLM_translate_prompt = """1. The Role
-                You have to translate the below input text - from Japanese - to English.
-                Preserve the tone of JRPG dialogue. 
-                Character names, spell names and item names should stay in their original form if untranslatable.
-
-                2. The Context
-                This current API call is part of a Python data pipeline. 
-                The user is a Japanese learner, using video games in Japanese to learn & practice Japanse. 
-                Extract dialogues and scenes from video game screenshots (from Dsi / New 3DS games or from PS Vita / PSP games).
-                Read the Japanese text visible in this image, then translate it.
-
-                3. Expected Output:
-                TRANSLATION:
-                Return only the translated text, no explanation, no commentary.
-
-                VOCABULARY
-                List the 3 - 5 most noteworthy vocabulary words or interesting grammar expression to remember from this extract
-                - <word in kanji> (<reading>) : <meaning in English>"""
-
-# Paths
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 
@@ -76,34 +59,37 @@ def draw_text_panel(original_img, text_lines, font_path=FONT_PATH):
     panel_np = np.array(panel)
     return panel_np
 
-def process_image(filename):
+def process_image(image_path, game_name):
     """
     Run the full pipeline on a single image: preprocess → VL model to translate.
 
     Args:
-        filename (str): Image filename (not full path) from INPUT_DIR.
+        image_path (str): Full path to the image file.
+        game_name (str): Game title injected into the prompt (derived from parent folder name).
 
     Returns:
-        list[str]: List containing the translated text (or error message).
+        list[str]: List containing the model's JSON response (or error message).
     """
-    input_path = os.path.join(INPUT_DIR, filename)
-    base_name  = os.path.splitext(filename)[0]
+    base_name = Path(image_path).stem  # filename without extension, used for the output JPG name
 
-    image   = preprocessing.preprocess(input_path)
+    image  = preprocessing.preprocess(image_path)
+    # Inject the game name into the prompt — replaces the {game_source} placeholder in translate.txt
+    prompt = LLM_translate_prompt.replace("{game_source}", game_name)
 
+    # Ollama expects image bytes, not a file path — encode the PIL image to JPEG in memory
     buffer = BytesIO()
     image.save(buffer, format="JPEG")
-    
+
     results = []
 
     try:
         response = ollama.chat(
                 model=MODEL,
-                messages=[{"role": "user", 
-                           "content": LLM_translate_prompt,
-                           "images": [buffer.getvalue()]
+                messages=[{"role"   : "user",
+                           "content": prompt,
+                           "images" : [buffer.getvalue()]
                            }],
-                options={"think": False}
+                options={"think": False}  # qwen3 thinking mode outputs to message["thinking"], leaving content empty
                 )
         results.append(response["message"]["content"])
 
@@ -111,10 +97,9 @@ def process_image(filename):
         print(f"[FULL ERROR]: {e}")
         results.append(f"[Translation Error: {e}]")
 
-    # Generate output image with only cropped area
+    # Build side-by-side output: preprocessed screen on the left, translation panel on the right
     text_panel = draw_text_panel(image, results)
-    cropped_np = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)  # PIL is RGB, cv2.imwrite expects BGR
-
+    cropped_np = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)  # PIL RGB → OpenCV BGR for imwrite
     output_image = np.hstack((cropped_np, text_panel))
     cv2.imwrite(os.path.join(OUTPUT_DIR, f"{base_name}_translated.jpg"), output_image)
 
@@ -122,27 +107,32 @@ def process_image(filename):
 
 def main(existing_files=None):
     """
-    Process all images in INPUT_DIR, skipping files already listed in output.md.
+    Process all images in INPUT_DIR (recursively), skipping already-processed files.
 
-    Writes results to output/output.md and saves a side-by-side output image
-    for each processed file.
+    Each subfolder of INPUT_DIR is treated as a game title. The relative key
+    "GameName/filename.jpg" is used to uniquely identify images across games
+    and to match against entries in output.md for skip detection.
 
     Args:
-        existing_files (set): Filenames already processed. Default: empty set.
+        existing_files (set): Relative keys already written to output.md. Default: empty set.
     """
     if existing_files is None:
         existing_files = set()
 
     all_results = {}
-    for filename in os.listdir(INPUT_DIR):
-        if filename.lower().endswith(('.png', '.jpg', '.jpeg')):
-            if filename in existing_files:
-                print(f"Skipping (already processed): {filename}")
-                continue
-            print(f"Processing: {filename}")
-            all_results[filename] = process_image(filename)
+    for image_path in Path(INPUT_DIR).rglob("*"):
+        if image_path.suffix.lower() in ('.png', '.jpg', '.jpeg'):
+            game_name    = image_path.parent.name            # subfolder name = game title
+            relative_key = f"{game_name}/{image_path.name}" # unique key across all games
 
-    # Save text output
+            if relative_key in existing_files:
+                print(f"Skipping (already processed): {relative_key}")
+                continue
+
+            print(f"Processing: {relative_key}")
+            all_results[relative_key] = process_image(str(image_path), game_name)
+
+    # Append to output.md — "a" mode never erases results from previous runs
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     with open(os.path.join(OUTPUT_DIR, "output.md"), "a", encoding="utf-8") as f:
         for key, value in all_results.items():
@@ -153,11 +143,13 @@ def main(existing_files=None):
             f.write("\n")
 
 if __name__ == "__main__":
+    # Build the skip set from output.md before running — lines like "### GameName/img1.jpg"
+    # are parsed to extract "GameName/img1.jpg" and stored in existing_files
     existing_files = set()
     output_md = os.path.join(OUTPUT_DIR, "output.md")
     if os.path.exists(output_md):
         with open(output_md, "r", encoding="utf-8") as f:
             for line in f:
                 if line.startswith("### "):
-                    existing_files.add(line.strip()[4:])
+                    existing_files.add(line.strip()[4:])  # strip "### " prefix → "GameName/img1.jpg"
     main(existing_files)

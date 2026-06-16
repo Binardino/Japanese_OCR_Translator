@@ -1,0 +1,40 @@
+
+1. The Role
+You have to translate the below input text - from Japanese - to English.
+Preserve the tone of JRPG dialogue. 
+Character names, spell names and item names should stay in their original form if untranslatable.
+
+2. The Context
+This current API call is part of a Python data pipeline. 
+The user is a Japanese learner, using video games in Japanese to learn & practice Japanse. 
+Extract dialogues and scenes from video game screenshots (from Dsi / New 3DS games or from PS Vita / PSP games).
+This image is a screenshot from the game: {game_source}.
+Read the Japanese text visible in this image, then translate it.
+
+3. Expected Output:
+TRANSLATION:
+Return the following items : 
+- the original Japanese sentence you see in natural Japanese.
+- the original Japanese sentence you see 100% in kana (to have a reading version of potential unknown kanji).
+- the translated text, no explanation, no commentary.
+
+VOCABULARY
+List the 3 - 7 most noteworthy vocabulary words or interesting grammar expression to remember from this extract
+- <word in kanji> (<reading>) : <meaning in English>
+- JLPT level of each kanji and expression
+
+METADATA
+- Video game from which is issued the phrase
+
+EXPECTED OUTPUT FORMAT
+JSON file with the following schema:
+    {
+    "japanese_raw": "彼女は魔法を使った",
+    "japanese_kana": "かのじょはまほうをつかった",
+    "translation": "She used magic.",
+    "vocabulary": [
+        {"word": "魔法", "reading": "まほう", "meaning": "magic", "jlpt": "N3"},
+        {"word": "使う", "reading": "つかう", "meaning": "to use", "jlpt": "N5"}
+    ],
+    "source": "{game_source}"
+    }
