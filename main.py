@@ -3,15 +3,10 @@ import cv2
 import preprocessing
 from PIL import Image, ImageDraw, ImageFont
 import numpy as np
-from config import INPUT_DIR, OUTPUT_DIR, FONT_PATH, DICT_PATH, JAMDICT_DB
-from manga_ocr import MangaOcr
-#jam = Jamdict(JAMDICT_DB)
+from config import INPUT_DIR, OUTPUT_DIR, FONT_PATH, MODEL
 import ollama
 from io import BytesIO
 
-# buffer.getvalue() = les bytes
-
-#mocr = MangaOcr()
 
 LLM_translate_prompt = """1. The Role
                 You have to translate the below input text - from Japanese - to English.
@@ -83,7 +78,7 @@ def draw_text_panel(original_img, text_lines, font_path=FONT_PATH):
 
 def process_image(filename):
     """
-    Run the full pipeline on a single image: preprocess → OCR → translate.
+    Run the full pipeline on a single image: preprocess → VL model to translate.
 
     Args:
         filename (str): Image filename (not full path) from INPUT_DIR.
@@ -103,15 +98,13 @@ def process_image(filename):
 
     try:
         response = ollama.chat(
-                model="qwen3-vl:8b",
+                model=MODEL,
                 messages=[{"role": "user", 
                            "content": LLM_translate_prompt,
                            "images": [buffer.getvalue()]
-                           }]
+                           }],
+                options={"think": False}
                 )
-        print("full message", response["message"])
-        print("---------------")
-        print("content", response["message"]["content"])
         results.append(response["message"]["content"])
 
     except Exception as e:

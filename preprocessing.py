@@ -2,8 +2,9 @@ from PIL import Image, ImageEnhance
 import cv2
 import numpy as np
 from pathlib import Path
+import os
 
-def detect_screen(image, debug=False):
+def detect_screen(image, debug=False, debug_dir='.'):
     """
     Detect the 3DS screen in a smartphone photo using contour detection.
 
@@ -13,6 +14,7 @@ def detect_screen(image, debug=False):
     Args:
         image (PIL.Image.Image): Raw smartphone photo.
         debug (bool): If True, saves debug_canny.jpg and prints contour info. Default: False.
+        debug_dir (str): Directory where debug images are saved. Default: current directory.
 
     Returns:
         numpy.ndarray: Array of shape (4, 2) with the screen's corner coordinates,
@@ -28,7 +30,7 @@ def detect_screen(image, debug=False):
     edges    = cv2.dilate(edges, kernel, iterations=1)
 
     if debug:
-        Image.fromarray(edges).save("debug_canny.jpg")
+        Image.fromarray(edges).save(os.path.join(debug_dir, "debug_canny.jpg"))
 
     contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
@@ -57,7 +59,7 @@ def detect_screen(image, debug=False):
     if debug:  # draw the largest contour for diagnosis when no quadrilateral was found
         debug_img = cv2.cvtColor(img_gray, cv2.COLOR_GRAY2RGB)
         cv2.drawContours(debug_img, [approx], -1, (0, 255, 0), 10)
-        Image.fromarray(debug_img).save("debug_contours.jpg")
+        Image.fromarray(debug_img).save(os.path.join(debug_dir,"debug_contours.jpg"))
 
     return None  # no quadrilateral found — caller should use a fixed-crop fallback
 
@@ -200,7 +202,7 @@ def super_resolve(image, scale=2):
     return image.resize((w * scale, h * scale), Image.LANCZOS)
 
 
-def preprocess(image_path, debug=False):
+def preprocess(image_path, debug=False, debug_dir='.'):
     """
     Run the full preprocessing pipeline on a smartphone photo of a 3DS screen.
 
@@ -217,7 +219,8 @@ def preprocess(image_path, debug=False):
     Args:
         image_path (str | Path): Path to the input smartphone photo.
         debug (bool): If True, saves intermediate images at each stage.
-                      Files are named debug_<stem>_01_correct_perspective.jpg etc.
+                    Files are named debug_<stem>_01_correct_perspective.jpg etc.
+        debug_dir (str): Directory where debug images are saved. Created if it doesn't exist.
 
     Returns:
         PIL.Image.Image: Preprocessed image, ready for manga-ocr or Gemini Vision.
@@ -225,24 +228,34 @@ def preprocess(image_path, debug=False):
     inputs = Image.open(image_path)
     stem   = Path(image_path).stem
 
-    corners = detect_screen(image=inputs, debug=debug)
+    if debug:
+        os.makedirs(debug_dir, exist_ok=True)
+
+    corners = detect_screen(image=inputs, debug=debug, debug_dir=debug_dir)
     if corners is not None:
         image    = correct_perspective(inputs, corners)
         if debug:
-            image.save(f"debug_{stem}_01_correct_perspective.jpg")
+            image.save(os.path.join(debug_dir, f"debug_{stem}_01_correct_perspective.jpg"))
     else:
         image = inputs  # fallback: no perspective correction
 
     dialogue = crop_dialogue(image)
     if debug:
-        dialogue.save(f"debug_{stem}_02_crop_dialogue.jpg")
+        dialogue.save(os.path.join(debug_dir, f"debug_{stem}_02_crop_dialogue.jpg"))
 
     enhanced = enhance_contrast(dialogue)
     if debug:
-        enhanced.save(f"debug_{stem}_03_enhance_contrast.jpg")
+        enhanced.save(os.path.join(debug_dir, f"debug_{stem}_03_enhance_contrast.jpg"))
 
     output   = super_resolve(enhanced)
     if debug:
-        output.save(f"debug_{stem}_04_super_resolve.jpg")
+        output.save(os.path.join(debug_dir, f"debug_{stem}_04_super_resolve.jpg"))
 
     return output
+
+if __name__ == "__main__":
+    import sys
+    if len(sys.argv) > 1:
+        preprocess(sys.argv[1], debug=True, debug_dir="output/debug")
+    else:
+        print("Usage: uv run python preprocessing.py <image_path>")
