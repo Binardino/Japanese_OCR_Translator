@@ -7,8 +7,11 @@ from config import INPUT_DIR, OUTPUT_DIR, FONT_PATH, DICT_PATH, JAMDICT_DB
 from manga_ocr import MangaOcr
 #jam = Jamdict(JAMDICT_DB)
 import ollama
+from io import BytesIO
 
-mocr = MangaOcr()
+# buffer.getvalue() = les bytes
+
+#mocr = MangaOcr()
 
 LLM_translate_prompt = """1. The Role
                 You have to translate the below input text - from Japanese - to English.
@@ -19,7 +22,7 @@ LLM_translate_prompt = """1. The Role
                 This current API call is part of a Python data pipeline. 
                 The user is a Japanese learner, using video games in Japanese to learn & practice Japanse. 
                 Extract dialogues and scenes from video game screenshots (from Dsi / New 3DS games or from PS Vita / PSP games).
-                The text below was extracted via OCR from a Japanese game screenshot (PS Vita or 3DS). OCR may contain minor errors.
+                Read the Japanese text visible in this image, then translate it.
 
                 3. Expected Output:
                 TRANSLATION:
@@ -92,16 +95,23 @@ def process_image(filename):
     base_name  = os.path.splitext(filename)[0]
 
     image   = preprocessing.preprocess(input_path)
-    jp_text = mocr(image)
+
+    buffer = BytesIO()
+    image.save(buffer, format="JPEG")
     
     results = []
 
     try:
         response = ollama.chat(
-                model="qwen2.5:7b",
-                messages=[{"role": "user", "content": f"{LLM_translate_prompt}\n\nText to translate:\n{jp_text}"}]
+                model="qwen3-vl:8b",
+                messages=[{"role": "user", 
+                           "content": LLM_translate_prompt,
+                           "images": [buffer.getvalue()]
+                           }]
                 )
-        print(response["message"]["content"])
+        print("full message", response["message"])
+        print("---------------")
+        print("content", response["message"]["content"])
         results.append(response["message"]["content"])
 
     except Exception as e:
