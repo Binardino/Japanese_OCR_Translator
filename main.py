@@ -8,6 +8,8 @@ import ollama
 from io import BytesIO
 from pathlib import Path
 import json
+from database.models import Translations, Vocabulary
+from database.database import SessionLocal
 
 # Load prompt once at startup — kept in a separate file so prompt edits don't require touching Python code
 LLM_translate_prompt = (Path(__file__).parent / "prompts" / "translate.txt").read_text()
@@ -108,6 +110,28 @@ def process_image(image_path, game_name):
 
         data = json.loads(clean_str)
         text_lines = [f"{data['japanese_raw']} → {data['translation']}"]
+
+        translation = Translations(game_name = game_name,
+                                filename     = Path(image_path).name,
+                                jap_raw      = data['japanese_raw'],
+                                jap_kana     = data['japanese_kana'],
+                                translation  = data['translation'])
+        
+        for word in data['vocabulary']:  # each word is a dict with word/reading/meaning/jlpt keys
+            vocab = Vocabulary(word     = word['word'],
+                                reading = word['reading'],
+                                meaning = word['meaning'],
+                                jlpt    = word['jlpt']
+                            )
+            
+            translation.vocabulary.append(vocab)
+        
+        db = SessionLocal()
+        try:
+            db.add(translation)  # cascade → vocabulary too with relation
+            db.commit()
+        finally:
+            db.close()
 
     except Exception as e:
         print(f"[FULL ERROR]: {e}")
