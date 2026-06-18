@@ -7,6 +7,7 @@ from config import INPUT_DIR, OUTPUT_DIR, FONT_PATH, MODEL
 import ollama
 from io import BytesIO
 from pathlib import Path
+import json
 
 # Load prompt once at startup — kept in a separate file so prompt edits don't require touching Python code
 LLM_translate_prompt = (Path(__file__).parent / "prompts" / "translate.txt").read_text()
@@ -68,7 +69,8 @@ def process_image(image_path, game_name):
         game_name (str): Game title injected into the prompt (derived from parent folder name).
 
     Returns:
-        list[str]: List containing the model's JSON response (or error message).
+        dict | None: Parsed JSON dict from the model (keys: japanese_raw, japanese_kana,
+                     translation, vocabulary, source), or None on error.
     """
     base_name = Path(image_path).stem  # filename without extension, used for the output JPG name
 
@@ -80,30 +82,44 @@ def process_image(image_path, game_name):
     buffer = BytesIO()
     image.save(buffer, format="JPEG")
 
-    results = []
+    data = None      # will hold the parsed JSON dict on success
+    text_lines = []  # display lines for the side-by-side panel
 
     try:
         response = ollama.chat(
                 model=MODEL,
                 messages=[{"role"   : "user",
-                           "content": prompt,
-                           "images" : [buffer.getvalue()]
-                           }],
+                        "content": prompt,
+                        "images" : [buffer.getvalue()]
+                        }],
                 options={"think": False}  # qwen3 thinking mode outputs to message["thinking"], leaving content empty
                 )
-        results.append(response["message"]["content"])
+        raw_content = response["message"]["content"]
+
+        # Strip markdown code fences the model may wrap around its JSON output
+        clean_str = raw_content.strip()
+        if clean_str.startswith("```json"):
+            clean_str = clean_str[7:]
+        elif clean_str.startswith("```"):
+            clean_str = clean_str[3:]
+        if clean_str.endswith("```"):
+            clean_str = clean_str[:-3]
+        clean_str = clean_str.strip()
+
+        data = json.loads(clean_str)
+        text_lines = [f"{data['japanese_raw']} → {data['translation']}"]
 
     except Exception as e:
         print(f"[FULL ERROR]: {e}")
-        results.append(f"[Translation Error: {e}]")
+        text_lines = [f"[Translation Error: {e}]"]
 
     # Build side-by-side output: preprocessed screen on the left, translation panel on the right
-    text_panel = draw_text_panel(image, results)
+    text_panel = draw_text_panel(image, text_lines)
     cropped_np = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)  # PIL RGB → OpenCV BGR for imwrite
     output_image = np.hstack((cropped_np, text_panel))
     cv2.imwrite(os.path.join(OUTPUT_DIR, f"{base_name}_translated.jpg"), output_image)
 
-    return results
+    return data
 
 def main(existing_files=None):
     """
@@ -136,10 +152,10 @@ def main(existing_files=None):
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     with open(os.path.join(OUTPUT_DIR, "output.md"), "a", encoding="utf-8") as f:
         for key, value in all_results.items():
+            if value is None:
+                continue
             f.write(f"### {key}\n")
-            for trad in value:
-                trad = trad.replace("\n", " ")
-                f.write(f"- {trad}\n")
+            f.write(f"- {value['japanese_raw']} → {value['translation']}\n")
             f.write("\n")
 
 if __name__ == "__main__":
