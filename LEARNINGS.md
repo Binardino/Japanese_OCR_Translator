@@ -289,3 +289,64 @@ for line in lines:
 translation = call_api(full_text)
 ```
 Fewer API calls = fewer rate limit hits, better context for the model.
+
+---
+
+## LLM Output Robustness
+
+### The key naming problem
+LLMs often deviate from the exact key names specified in the prompt, even when their internal reasoning shows they know the correct schema. Examples encountered:
+
+| Intended key | Model produced |
+|---|---|
+| `japanese_raw` | `"Japanese raw"` |
+| `japanese_kana` | `"Kana"` |
+| `translation` | `"Translation"` |
+| `jlpt` | `"JLPT Level"`, `"level"`, `"jlpt_level"` |
+
+Two complementary defenses:
+
+**1. Ollama Structured Outputs** — enforces exact key names at the token sampling level, not as a prompt instruction. The model physically cannot produce a different key:
+```python
+RESPONSE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "japanese_raw": {"type": "string"},
+        "translation":  {"type": "string"},
+        ...
+    },
+    "required": ["japanese_raw", "translation", ...]
+}
+response = ollama.chat(model=MODEL, messages=[...], format=RESPONSE_SCHEMA)
+```
+
+**2. Python-side key normalization** — safety net in case the model still deviates:
+```python
+data = json.loads(raw_content)
+data = {k.lower().replace(' ', '_'): v for k, v in data.items()}
+# "Japanese raw" → "japanese_raw", "Translation" → "translation"
+```
+
+Always use both: structured output prevents the problem, normalization catches edge cases.
+
+### `data = None` in the except block
+When `json.loads()` succeeds but a subsequent key access fails, `data` already holds a wrong-keyed dict. Without resetting it, the caller receives a non-None value and crashes:
+```python
+data = None
+try:
+    data = json.loads(raw_content)   # succeeds, sets data
+    _ = data['japanese_raw']          # KeyError → jumps to except
+    ...
+except Exception as e:
+    data = None  # reset: don't leak a malformed dict as if it were a success
+```
+
+### Hallucination under structured outputs
+When a model can't read the image content (poor quality, scan lines), and structured output forces it to fill every required field, it **fabricates content** rather than failing. This is a different failure mode than key naming errors:
+- With free-form output: model might return prose, wrong keys, or refuse
+- With structured output: model returns valid JSON with correct keys but **invented content**
+
+The fix is not in the code — it's in the input data quality. For phone photos of physical screens, a VLM will hallucinate on any unreadable image. The `None` return from `process_image()` on exception prevents bad data from reaching the database.
+
+### `think=False` with structured outputs (qwen3)
+`options={"think": True}` and `format=<schema>` can conflict in Ollama with qwen3 models: thinking tokens interfere with the constrained sampling, causing the final JSON to diverge from what the model reasoned internally. Always set `think=False` when using structured output mode.

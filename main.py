@@ -14,6 +14,32 @@ from database.database import SessionLocal
 # Load prompt once at startup — kept in a separate file so prompt edits don't require touching Python code
 LLM_translate_prompt = (Path(__file__).parent / "prompts" / "translate.txt").read_text()
 
+# JSON schema passed to Ollama's structured output feature — enforces exact key names at the sampling level,
+# so the model physically cannot produce wrong keys regardless of how it reasons internally.
+RESPONSE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "japanese_raw":  {"type": "string"},
+        "japanese_kana": {"type": "string"},
+        "translation":   {"type": "string"},
+        "vocabulary": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "word":    {"type": "string"},
+                    "reading": {"type": "string"},
+                    "meaning": {"type": "string"},
+                    "jlpt":    {"type": "string"}
+                },
+                "required": ["word", "reading", "meaning"]
+            }
+        },
+        "source": {"type": "string"}
+    },
+    "required": ["japanese_raw", "japanese_kana", "translation", "vocabulary"]
+}
+
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 
@@ -94,7 +120,8 @@ def process_image(image_path, game_name):
                         "content": prompt,
                         "images" : [buffer.getvalue()]
                         }],
-                options={"think": False}  # qwen3 thinking mode outputs to message["thinking"], leaving content empty
+                format=RESPONSE_SCHEMA,  # structured output: enforces exact key names at sampling level
+                options={"think": False}
                 )
         raw_content = response["message"]["content"]
 
@@ -109,23 +136,26 @@ def process_image(image_path, game_name):
         clean_str = clean_str.strip()
 
         data = json.loads(clean_str)
-        text_lines = [f"{data['japanese_raw']} → {data['translation']}"]
+        # Normalize top-level keys: "Japanese raw" → "japanese_raw", "Translation" → "translation", etc.
+        data = {k.lower().replace(' ', '_'): v for k, v in data.items()}
+
+        text_lines = [f"{data.get('japanese_raw', '?')} → {data.get('translation', '?')}"]
 
         translation = Translations(game_name = game_name,
                                 filename     = Path(image_path).name,
-                                jap_raw      = data['japanese_raw'],
-                                jap_kana     = data['japanese_kana'],
-                                translation  = data['translation'])
-        
-        for word in data['vocabulary']:  # each word is a dict with word/reading/meaning/jlpt keys
-            vocab = Vocabulary(word     = word['word'],
-                                reading = word['reading'],
-                                meaning = word['meaning'],
-                                jlpt    = word['jlpt']
+                                jap_raw      = data.get('japanese_raw', ''),
+                                jap_kana     = data.get('japanese_kana') or data.get('kana', ''),
+                                translation  = data.get('translation', ''))
+
+        for word in data.get('vocabulary', []):  # each word is a dict with word/reading/meaning/jlpt keys
+            vocab = Vocabulary(word     = word.get('word', ''),
+                                reading = word.get('reading', ''),
+                                meaning = word.get('meaning', ''),
+                                jlpt    = word.get('jlpt') or word.get('jlpt_level') or word.get('level')
                             )
-            
+
             translation.vocabulary.append(vocab)
-        
+
         db = SessionLocal()
         try:
             db.add(translation)  # cascade → vocabulary too with relation
@@ -136,6 +166,7 @@ def process_image(image_path, game_name):
     except Exception as e:
         print(f"[FULL ERROR]: {e}")
         text_lines = [f"[Translation Error: {e}]"]
+        data = None  # don't return a partial/malformed dict as if it were a success
 
     # Build side-by-side output: preprocessed screen on the left, translation panel on the right
     text_panel = draw_text_panel(image, text_lines)
@@ -179,7 +210,7 @@ def main(existing_files=None):
             if value is None:
                 continue
             f.write(f"### {key}\n")
-            f.write(f"- {value['japanese_raw']} → {value['translation']}\n")
+            f.write(f"- {value.get('japanese_raw', '?')} → {value.get('translation', '?')}\n")
             f.write("\n")
 
 if __name__ == "__main__":

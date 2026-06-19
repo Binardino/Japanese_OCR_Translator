@@ -27,7 +27,9 @@ METADATA
 - Video game from which is issued the phrase
 
 EXPECTED OUTPUT FORMAT
-JSON file with the following schema:
+Return ONLY valid JSON. No text before or after. No markdown fences. 
+IMPORTANT: Use EXACTLY the key names shown below. Never use "jlpt_level", "level", "kana" or any other variant. Any deviation will break the pipeline.
+Schema:
     {
     "japanese_raw": "彼女は魔法を使った",
     "japanese_kana": "かのじょはまほうをつかった",

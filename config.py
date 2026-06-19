@@ -9,7 +9,7 @@ INPUT_DIR      = os.getenv("INPUT_DIR", "./data")
 OUTPUT_DIR     = os.getenv("OUTPUT_DIR", "./output")
 DICT_PATH      = os.getenv("DICT_PATH")
 JAMDICT_DB     = os.getenv("JAMDICT_DB")
-MODEL          = os.getenv("MODEL_NAME")
+MODEL          = os.getenv("MODEL")
 
 if not FONT_PATH:
     raise ValueError("FONT_PATH is not defined in the .env file")
