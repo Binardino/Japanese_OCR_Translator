@@ -239,17 +239,21 @@ def preprocess(image_path, debug=False, debug_dir='.'):
     else:
         image = inputs  # fallback: no perspective correction
 
-    dialogue = crop_dialogue(image)
-    if debug:
-        dialogue.save(os.path.join(debug_dir, f"debug_{stem}_02_crop_dialogue.jpg"))
+  #  dialogue = crop_dialogue(image)
+  #  if debug:
+  #      dialogue.save(os.path.join(debug_dir, f"debug_{stem}_02_crop_dialogue.jpg"))
 
-    enhanced = enhance_contrast(dialogue)
+    enhanced = enhance_contrast(image)
     if debug:
         enhanced.save(os.path.join(debug_dir, f"debug_{stem}_03_enhance_contrast.jpg"))
 
     output   = super_resolve(enhanced)
     if debug:
         output.save(os.path.join(debug_dir, f"debug_{stem}_04_super_resolve.jpg"))
+
+    output.thumbnail((1024, 1024), Image.LANCZOS)
+    if debug:
+        output.save(os.path.join(debug_dir, f"debug_{stem}_05_thumbnail.jpg"))
 
     return output
 

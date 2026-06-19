@@ -121,12 +121,14 @@ def process_image(image_path, game_name):
                         "images" : [buffer.getvalue()]
                         }],
                 format=RESPONSE_SCHEMA,  # structured output: enforces exact key names at sampling level
-                options={"think": False}
+                options={"think": False} #, "num_predict": 2048}
                 )
         raw_content = response["message"]["content"]
+        print(f"[DEBUG] raw_content length: {len(raw_content)}, image bytes: {len(buffer.getvalue())}")
+        print(f"[CONTENT] {raw_content}")
 
         # Strip markdown code fences the model may wrap around its JSON output
-        clean_str = raw_content.strip()
+        clean_str = raw_content.replace('\n', ' ').strip()
         if clean_str.startswith("```json"):
             clean_str = clean_str[7:]
         elif clean_str.startswith("```"):
